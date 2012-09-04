@@ -1,4 +1,5 @@
 require 'posix-spawn'
+require 'rbconfig'
 
 ##
 # Wrapper for the Pygments command line tool, pygmentize.
@@ -75,7 +76,8 @@ class Albino
 
   def initialize(target, lexer = :text, format = :html, encoding = self.class.default_encoding)
     @target  = target
-    @options = { :l => lexer, :f => format, :O => "encoding=#{encoding}" }
+#    @options = { :l => lexer, :f => format, :O => "encoding=#{encoding}" }
+    @options = { :l => lexer, :f => format}
     @encoding = encoding
   end
 
@@ -84,11 +86,21 @@ class Albino
     proc_options[:timeout] = options.delete(:timeout) || self.class.timeout_threshold
     command = convert_options(options)
     command.unshift(bin)
-    Child.new(*(command + [proc_options.merge(:input => write_target)]))
+    if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+      output = ''
+      IO.popen(command, mode='r+') do |p|
+        p.write @target
+        p.close_write
+        output = p.read.strip
+      end
+      output
+    else
+      Child.new(*(command + [proc_options.merge(:input => write_target)]))
+    end
   end
 
   def colorize(options = {})
-    out = execute(options).out
+    out = RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/ ? execute(options) : execute(options).out
 
     # markdown requires block elements on their own line
     out.sub!(%r{</pre></div>\Z}, "</pre>\n</div>")
